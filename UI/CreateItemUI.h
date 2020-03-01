@@ -1,6 +1,7 @@
 #pragma once
 #include "UIView.h"
 #include "../Objects/PipelineItem.h"
+#include "../Objects/ShaderVariable.h"
 
 namespace ed
 {
@@ -11,10 +12,11 @@ namespace ed
 			SetOwner(nullptr);
 			m_item.Data = nullptr;
 			m_selectedGroup = 0;
+			m_errorOccured = false;
 			memset(m_owner, 0, PIPELINE_ITEM_NAME_LENGTH * sizeof(char));
 		}
 
-		virtual void OnEvent(const ml::Event& e);
+		virtual void OnEvent(const SDL_Event& e);
 		virtual void Update(float delta);
 
 		void SetOwner(const char* shaderPass);
@@ -22,8 +24,13 @@ namespace ed
 		bool Create();
 
 	private:
+		void m_autoVariablePopulate(pipe::ShaderPass* pass);
+		ed::SystemShaderVariable m_autoSystemValue(const std::string& name);
+
 		std::vector<std::string> m_groups;
 		int m_selectedGroup;
+
+		bool m_errorOccured;
 
 		char m_owner[PIPELINE_ITEM_NAME_LENGTH];
 		PipelineItem m_item;

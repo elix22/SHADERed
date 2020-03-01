@@ -1,11 +1,15 @@
 #pragma once
-#include <MoonLight/Base/Timer.h>
-#include <DirectXMath.h>
+#include "../Engine/Timer.h"
+#include <glm/glm.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/euler_angles.hpp>
 #include "ShaderVariable.h"
-#include "PipelineItem.h"
 #include "ArcBallCamera.h"
+#include "PipelineItem.h"
 #include "FirstPersonCamera.h"
 #include "Settings.h"
+
+#include <unordered_map>
 
 namespace ed
 {
@@ -19,21 +23,28 @@ namespace ed
 			return ret;
 		}
 
-		SystemVariableManager() : 
-			m_deltaTime(0.0f),
-			m_viewport(0,0), m_mouse(0,0),
-			m_isPicked(false), m_camPos(0,0,0),
-			m_wasd(0,0,0,0) {
-			m_geometryTransform = DirectX::XMMatrixIdentity();
+		SystemVariableManager()
+		{
+			m_curState.FrameIndex = 0;
+			m_curState.IsPicked = false;
+			m_curState.WASD = glm::vec4(0,0,0,0);
+			m_curState.Viewport = glm::vec2(0,1);
+			m_curState.MousePosition = glm::vec2(0,0);
+			m_curState.DeltaTime = 0.0f;
+			m_curGeoTransform.clear();
+			m_prevGeoTransform.clear();
 		}
 
 		static inline ed::ShaderVariable::ValueType GetType(ed::SystemShaderVariable sysVar)
 		{
 			switch (sysVar) {
 				case ed::SystemShaderVariable::MousePosition: return ed::ShaderVariable::ValueType::Float2;
+				case ed::SystemShaderVariable::Mouse: return ed::ShaderVariable::ValueType::Float4;
+				case ed::SystemShaderVariable::MouseButton: return ed::ShaderVariable::ValueType::Float4;
 				case ed::SystemShaderVariable::Projection: return ed::ShaderVariable::ValueType::Float4x4;
 				case ed::SystemShaderVariable::Time: return ed::ShaderVariable::ValueType::Float1;
 				case ed::SystemShaderVariable::TimeDelta: return ed::ShaderVariable::ValueType::Float1;
+				case ed::SystemShaderVariable::FrameIndex: return ed::ShaderVariable::ValueType::Integer1;
 				case ed::SystemShaderVariable::View: return ed::ShaderVariable::ValueType::Float4x4;
 				case ed::SystemShaderVariable::ViewportSize: return ed::ShaderVariable::ValueType::Float2;
 				case ed::SystemShaderVariable::ViewProjection: return ed::ShaderVariable::ValueType::Float4x4;
@@ -42,50 +53,71 @@ namespace ed
 				case ed::SystemShaderVariable::GeometryTransform: return ed::ShaderVariable::ValueType::Float4x4;
 				case ed::SystemShaderVariable::IsPicked: return ed::ShaderVariable::ValueType::Boolean1;
 				case ed::SystemShaderVariable::CameraPosition: return ed::ShaderVariable::ValueType::Float4;
+				case ed::SystemShaderVariable::CameraPosition3: return ed::ShaderVariable::ValueType::Float3;
+				case ed::SystemShaderVariable::CameraDirection3: return ed::ShaderVariable::ValueType::Float3;
 				case ed::SystemShaderVariable::KeysWASD: return ed::ShaderVariable::ValueType::Integer4;
 			}
 
 			return ed::ShaderVariable::ValueType::Float1;
 		}
 
-		void Update(ed::ShaderVariable* var);
+		void Update(ed::ShaderVariable* var, void* item = nullptr);
 
-		inline Camera* GetCamera() { return Settings::Instance().Project.FPCamera ? (Camera*)&m_fpCam : (Camera*)&m_abCam; }
-		inline DirectX::XMMATRIX GetViewMatrix() { return Settings::Instance().Project.FPCamera ? m_fpCam.GetMatrix() : m_abCam.GetMatrix(); }
-		inline DirectX::XMMATRIX GetProjectionMatrix() { return DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(45), (float)m_viewport.x / m_viewport.y, 0.1f, 1000.0f); }
-		inline DirectX::XMMATRIX GetOrthographicMatrix() { return DirectX::XMMatrixOrthographicLH(m_viewport.x, m_viewport.y, 0.1f, 1000.0f); }
-		inline DirectX::XMMATRIX GetViewProjectionMatrix() { return GetViewMatrix() * GetProjectionMatrix(); }
-		inline DirectX::XMMATRIX GetViewOrthographicMatrix() { return GetViewMatrix() * GetOrthographicMatrix(); }
-		inline DirectX::XMMATRIX GetGeometryTransform() { return m_geometryTransform; }
-		inline DirectX::XMFLOAT2 GetViewportSize() { return m_viewport; }
-		inline DirectX::XMINT4 GetKeysWASD() { return m_wasd; }
-		inline DirectX::XMFLOAT2 GetMousePosition() { return m_mouse; }
-		inline float GetTime() { return m_timer.GetElapsedTime(); }
-		inline float GetTimeDelta() { return m_deltaTime; }
-		inline bool IsPicked() { return m_isPicked; }
+		void Reset();
+		void CopyState();
 
-		inline void SetGeometryTransform(const DirectX::XMFLOAT3& scale, const DirectX::XMFLOAT3& rota, const DirectX::XMFLOAT3& pos)
+		inline Camera* GetCamera() { return Settings::Instance().Project.FPCamera ? (Camera*)&m_curState.FPCam : (Camera*)&m_curState.ArcCam; }
+		inline glm::mat4 GetViewMatrix() { return Settings::Instance().Project.FPCamera ? m_curState.FPCam.GetMatrix() : m_curState.ArcCam.GetMatrix(); }
+		inline glm::mat4 GetProjectionMatrix() { return glm::perspective(glm::radians(45.0f), m_curState.Viewport.x / m_curState.Viewport.y, 0.1f, 1000.0f); }
+		inline glm::mat4 GetOrthographicMatrix() { return glm::ortho(0.0f, m_curState.Viewport.x, m_curState.Viewport.y, 0.0f, 0.1f, 1000.0f); }
+		inline glm::mat4 GetViewProjectionMatrix() { return GetProjectionMatrix() * GetViewMatrix(); }
+		inline glm::mat4 GetViewOrthographicMatrix() { return GetOrthographicMatrix() * GetViewMatrix(); }
+		inline glm::mat4 GetGeometryTransform(PipelineItem* item) { return m_curGeoTransform[item]; }
+		inline glm::vec2 GetViewportSize() { return m_curState.Viewport; }
+		inline glm::ivec4  GetKeysWASD() { return m_curState.WASD; }
+		inline glm::vec2 GetMousePosition() { return m_curState.MousePosition; }
+		inline glm::vec4 GetMouse() { return m_curState.Mouse; }
+		inline glm::vec4 GetMouseButton() { return m_curState.MouseButton; }
+		inline unsigned int GetFrameIndex() { return m_curState.FrameIndex; }
+		inline float GetTime() { return m_timer.GetElapsedTime() + m_advTimer; }
+		inline eng::Timer& GetTimeClock() { return m_timer; }
+		inline float GetTimeDelta() { return m_curState.DeltaTime; }
+		inline bool IsPicked() { return m_curState.IsPicked; }
+
+		inline void SetGeometryTransform(PipelineItem* item, const glm::vec3& scale, const glm::vec3& rota, const glm::vec3& pos)
 		{
-			m_geometryTransform = DirectX::XMMatrixScaling(scale.x, scale.y, scale.z) *
-				DirectX::XMMatrixRotationRollPitchYaw(rota.x, rota.y, rota.z) *
-				DirectX::XMMatrixTranslation(pos.x, pos.y, pos.z);
+			m_curGeoTransform[item] = glm::translate(glm::mat4(1), pos) *
+				glm::yawPitchRoll(rota.y, rota.x, rota.z) * 
+				glm::scale(glm::mat4(1.0f), scale);
 		}
-		inline void SetViewportSize(float x, float y) { m_viewport = DirectX::XMFLOAT2(x, y); }
-		inline void SetMousePosition(float x, float y) { m_mouse = DirectX::XMFLOAT2(x, y); }
-		inline void SetTimeDelta(float x) { m_deltaTime = x; }
-		inline void SetPicked(bool picked) { m_isPicked = picked; }
-		inline void SetKeysWASD(int w, int a, int s, int d) { m_wasd = DirectX::XMINT4(w, a, s, d); }
+		inline void SetViewportSize(float x, float y) { m_curState.Viewport = glm::vec2(x, y); }
+		inline void SetMousePosition(float x, float y) { m_curState.MousePosition = glm::vec2(x, y); }
+		inline void SetMouse(float x, float y, float left, float right) { m_curState.Mouse = glm::vec4(x, y, left, right); }
+		inline void SetMouseButton(float x, float y, float left, float right) { m_curState.MouseButton = glm::vec4(x, y, left, right); }
+		inline void SetTimeDelta(float x) { m_curState.DeltaTime = x; }
+		inline void SetPicked(bool picked) { m_curState.IsPicked = picked; }
+		inline void SetKeysWASD(int w, int a, int s, int d) { m_curState.WASD = glm::ivec4(w, a, s, d); }
+		inline void SetFrameIndex(unsigned int ind) { m_curState.FrameIndex = ind; }
+
+		inline void AdvanceTimer(float t) { m_advTimer += t; }
 
 	private:
-		ml::Timer m_timer;
-		float m_deltaTime;
-		ArcBallCamera m_abCam;
-		FirstPersonCamera m_fpCam;
-		DirectX::XMFLOAT2 m_viewport, m_mouse;
-		DirectX::XMMATRIX m_geometryTransform;
-		bool m_isPicked;
+		eng::Timer m_timer;
+		float m_advTimer;
 
-		DirectX::XMFLOAT3 m_camPos;
-		DirectX::XMINT4 m_wasd;
+		struct ValueGroup
+		{
+			float DeltaTime;
+			ArcBallCamera ArcCam;
+			FirstPersonCamera FPCam;
+			glm::vec2 Viewport, MousePosition;
+			bool IsPicked;
+			unsigned int FrameIndex;
+			glm::ivec4 WASD;
+			glm::vec4 Mouse, MouseButton;
+		} m_prevState, m_curState;
+
+
+		std::unordered_map<PipelineItem*, glm::mat4> m_curGeoTransform, m_prevGeoTransform;
 	};
 }

@@ -1,11 +1,41 @@
 #include "ThemeContainer.h"
-#include <inih/INIReader.h>
+#include "Logger.h"
 #include <sstream>
 
 namespace ed
 {
+	ThemeContainer::ThemeContainer()
+	{
+		m_custom["Light"].ComputePass = ImVec4(0, 0.4f, 0, 1);
+		m_custom["Light"].ErrorMessage = ImVec4(1.0f, 0.17f, 0.13f, 1.0f);
+		m_custom["Light"].WarningMessage = ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
+		m_custom["Light"].InfoMessage = ImVec4(0.106f, 0.631f, 0.886f, 1.0f);
+		m_custom["Dark"].ComputePass = ImVec4(0, 1.0f, 0.5f, 1);
+		m_custom["Dark"].ErrorMessage = ImVec4(1.0f, 0.17f, 0.13f, 1.0f);
+		m_custom["Dark"].WarningMessage = ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
+		m_custom["Dark"].InfoMessage = ImVec4(0.106f, 0.631f, 0.886f, 1.0f);
+	}
+	ImVec4 ThemeContainer::m_loadColor(const INIReader& ini, const std::string& clrName)
+	{
+		std::string clr = ini.Get("colors", clrName, "0");
+		if (clr == "0") {
+			// default colors
+			if (clrName == "ComputePass")
+				return ImVec4(1,0,0,1);
+			else if (clrName == "OutputError")
+				return ImVec4(1.0f, 0.17f, 0.13f, 1.0f);
+			else if (clrName == "OutputWarning")
+				return ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
+			else if (clrName == "OutputMessage")
+				return ImVec4(0.106f, 0.631f, 0.886f, 1.0f);
+		}
+		else
+			return m_parseColor(clr);
+	}
 	std::string ThemeContainer::LoadTheme(const std::string& filename)
 	{
+		Logger::Get().Log("Loading a theme from file " + filename);
+
 		static const std::string ColorNames[] = {
 			"Text",
 			"TextDisabled",
@@ -76,18 +106,27 @@ namespace ed
 			"Selection",
 			"ErrorMarker",
 			"Breakpoint",
+			"BreakpointOutline",
+			"CurrentLineIndicator",
+			"CurrentLineIndicatorOutline",
 			"LineNumber",
 			"CurrentLineFill",
 			"CurrentLineFillInactive",
-			"CurrentLineEdge"
+			"CurrentLineEdge",
+			"ErrorMessage"
 		};
 
 		INIReader ini("./themes/" + filename);
-		
+		if (ini.ParseError() != 0) {
+			Logger::Get().Log("Failed to parse a theme from file " + filename, true);
+			return "";
+		}
+
 		std::string name = ini.Get("general", "name", "NULL");
 		std::string editorTheme = ini.Get("general", "editor", "Dark");
 		int version = ini.GetInteger("general", "version", 1);
 
+		CustomColors& custom = m_custom[name];
 		ImGuiStyle& style = m_ui[name];
 		ImGuiStyle& defaultStyle = ImGui::GetStyle();
 		TextEditor::Palette& palette = m_editor[name];
@@ -99,6 +138,10 @@ namespace ed
 			else
 				style.Colors[(ImGuiCol_)i] = m_parseColor(clr);
 		}
+		custom.ComputePass = m_loadColor(ini, "ComputePass");
+		custom.ErrorMessage = m_loadColor(ini, "OutputError");
+		custom.WarningMessage = m_loadColor(ini, "OutputWarning");
+		custom.InfoMessage = m_loadColor(ini, "OutputMessage");
 
 		style.Alpha = ini.GetReal("style", "Alpha", defaultStyle.Alpha);
 		style.WindowPadding.x = ini.GetReal("style", "WindowPaddingX", defaultStyle.WindowPadding.x);
@@ -162,10 +205,6 @@ namespace ed
 			m_editor[name] = GetTextEditorStyle(editorTheme);
 
 		return name;
-	}
-	ImGuiStyle ThemeContainer::GetUIStyle(const std::string& name)
-	{
-		return m_ui[name];
 	}
 	TextEditor::Palette ThemeContainer::GetTextEditorStyle(const std::string& name)
 	{

@@ -1,11 +1,12 @@
 #pragma once
-#include <MoonLight/Base/Window.h>
-#include <MoonLight/Base/Event.h>
+#include "Objects/PluginAPI/PluginManager.h"
+#include "Objects/DebugInformation.h"
 #include "Objects/PipelineManager.h"
 #include "Objects/ObjectManager.h"
 #include "Objects/ProjectParser.h"
 #include "Objects/RenderEngine.h"
 #include "Objects/MessageStack.h"
+#include <SDL2/SDL_events.h>
 
 namespace ed
 {
@@ -14,21 +15,23 @@ namespace ed
 	class InterfaceManager
 	{
 	public:
-		InterfaceManager(GUIManager* gui, ml::Window* wnd);
+		InterfaceManager(GUIManager* gui);
+		~InterfaceManager();
 
-		void OnEvent(const ml::Event& e);
+		void OnEvent(const SDL_Event& e);
 		void Update(float delta);
 
-		inline ml::Window* GetOwner() { return m_wnd; }
+		bool FetchPixel(PixelInformation& pixel);
 
-		PipelineManager Pipeline;
+		PluginManager Plugins;
 		RenderEngine Renderer;
+		PipelineManager Pipeline;
+		ObjectManager Objects;
 		ProjectParser Parser;
 		MessageStack Messages;
-		ObjectManager Objects;
+		DebugInformation Debugger;
 
 	private:
 		GUIManager* m_ui;
-		ml::Window* m_wnd;
 	};
 }

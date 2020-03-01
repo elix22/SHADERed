@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2019-2020 dfranx -->
+<component type="desktop">
+  <id>org.shadered.SHADERed.desktop</id>
+  <name>SHADERed</name>
+  <summary>Tool for creating and testing HLSL and GLSL shaders</summary>
+  <description>
+    <p>
+      SHADERed is a lightweight tool for creating and testing HLSL and GLSL
+      shaders. It is easy to use, open source, cross-platform (runs on Windows
+      &amp; Linux - HLSL shaders work on both OS) and frequently updated with
+      new features.
+    </p>
+  </description>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer_name>dfranx</developer_name>
+  <url type="homepage">https://github.com/dfranx/SHADERed</url>
+  <url type="help">https://github.com/dfranx/SHADERed/blob/master/TUTORIAL.md</url>
+  <url type="bugtracker">https://github.com/dfranx/SHADERed/issues</url>
+  <url type="donation">https://www.patreon.com/dfranx</url>
+  <screenshots>
+    <screenshot type="default" width="1782" height="885">
+      <image type="source">https://shadered.org/img/screen1.png</image>
+      <caption>Editing an HLSL shader</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.3" date="2020-02-25"/>
+  </releases>
+  <update_contact>hugo.locurcio@hugo.pro</update_contact>
+</component>

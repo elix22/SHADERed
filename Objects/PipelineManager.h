@@ -11,24 +11,28 @@ namespace ed
 	{
 	public:
 
-		PipelineManager(ml::Window* wnd, ProjectParser* project);
+		PipelineManager(ProjectParser* project);
 		~PipelineManager();
 
 		void Clear();
 
 		bool AddItem(const char* owner, const char* name, PipelineItem::ItemType type, void* data);
-		bool AddPass(const char* name, ed::pipe::ShaderPass* data);
+		bool AddPluginItem(char* owner, const char* name, const char* type, void* data, IPlugin* plugin);
+		bool AddShaderPass(const char* name, ed::pipe::ShaderPass* data);
+		bool AddComputePass(const char* name, pipe::ComputePass* data);
+		bool AddAudioPass(const char* name, pipe::AudioPass* data);
 		void Remove(const char* name);
 		bool Has(const char* name);
 		PipelineItem* Get(const char* name);
+		char* GetItemOwner(const char* name);
 		inline std::vector<PipelineItem*>& GetList() { return m_items; }
 
 		void New(bool openTemplate = true);
 
-		inline ml::Window* GetOwner() { return m_wnd; }
+		void FreeData(void* data, PipelineItem::ItemType type);
 
 	private:
-		ml::Window* m_wnd;
+
 		ProjectParser* m_project;
 		std::vector<PipelineItem*> m_items;
 	};

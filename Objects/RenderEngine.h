@@ -1,16 +1,24 @@
 #pragma once
 #include "PipelineManager.h"
+#include "DebugInformation.h"
 #include "ProjectParser.h"
 #include "MessageStack.h"
+#include "PluginAPI/PluginManager.h"
+#include "../Engine/Timer.h"
 
-#include <MoonLight/Base/ShaderResourceView.h>
-#include <MoonLight/Base/RenderTexture.h>
-#include <MoonLight/Base/GeometryShader.h>
-#include <MoonLight/Base/VertexShader.h>
-#include <MoonLight/Base/SamplerState.h>
-#include <MoonLight/Base/PixelShader.h>
-#include <MoonLight/Base/Timer.h>
 #include <unordered_map>
+#include <functional>
+
+#include <glm/glm.hpp>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#include <GL/glew.h>
+#if defined(__APPLE__)
+	#include <OpenGL/gl.h>
+#else
+	#include <GL/gl.h>
+#endif
 
 namespace ed
 {
@@ -19,19 +27,36 @@ namespace ed
 	class RenderEngine
 	{
 	public:
-		RenderEngine(ml::Window* wnd, PipelineManager* pipeline, ObjectManager* objects, ProjectParser* project, MessageStack* messages);
+		RenderEngine(PipelineManager* pipeline, ObjectManager* objects, ProjectParser* project, MessageStack* messages, PluginManager* plugins, DebugInformation* debugger);
 		~RenderEngine();
 
-		void Render(int width, int height);
+		void DebugPixelPick(glm::vec2 r);
+		int DebugVertexPick(PipelineItem* pass, PipelineItem* item, glm::vec2 r);
+		int DebugInstancePick(PipelineItem* pass, PipelineItem* item, glm::vec2 r);
+
+		void Render(int width, int height, bool isDebug = false);
+		inline void Render(bool isDebug = false) { Render(m_lastSize.x, m_lastSize.y, isDebug); }
 		void Recompile(const char* name);
-		void Pick(float sx, float sy, std::function<void(PipelineItem*)> func = nullptr);
+		void RecompileFile(const char* fname);
+		void RecompileFromSource(const char* name, const std::string& vs = "", const std::string& ps = "", const std::string& gs = "");
+		void Pick(float sx, float sy, bool multiPick, std::function<void(PipelineItem*)> func = nullptr);
+		void Pick(PipelineItem* item, bool add = false);
+		inline bool IsPicked(PipelineItem* item) { return std::count(m_pick.begin(), m_pick.end(), item); }
 
 		void FlushCache();
+		void AddPickedItem(PipelineItem* pipe, bool multiPick = false);
 
-		inline ml::ShaderResourceView& GetTexture() { return m_rtView; }
-		inline ml::RenderTexture& GetRenderTexture() { return m_rt; }
+		std::pair<PipelineItem*, PipelineItem*> GetPipelineItemByID(int id); // get pipeline item by it's debug id
 
-		DirectX::XMINT2 GetLastRenderSize() { return m_lastSize; }
+		inline void AllowComputeShaders(bool cs) { m_computeSupported = cs; }
+
+		inline void RequestTextureResize() { m_lastSize = glm::ivec2(1,1); }
+		inline GLuint GetTexture() { return m_rtColor; }
+		inline GLuint GetDepthTexture() { return m_rtDepth; }
+		inline glm::ivec2 GetLastRenderSize() { return m_lastSize; }
+
+		inline bool IsPaused() { return m_paused; }
+		void Pause(bool pause);
 
 	public:
 		struct ItemVariableValue
@@ -39,7 +64,7 @@ namespace ed
 			ItemVariableValue(ed::ShaderVariable* var) { 
 				Variable = var;
 				OldValue = var->Data;
-				NewValue = new ShaderVariable(var->GetType(), var->Name, var->System, var->Slot);
+				NewValue = new ShaderVariable(var->GetType(), var->Name, var->System);
 				NewValue->Function = var->Function;
 				Item = nullptr;
 			}
@@ -71,35 +96,58 @@ namespace ed
 		ObjectManager* m_objects;
 		ProjectParser* m_project;
 		MessageStack* m_msgs;
-		ml::Window* m_wnd;
+		PluginManager* m_plugins;
+		DebugInformation* m_debug;
 
-		// multiple render targets
-		ID3D11RenderTargetView* m_views[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
+		// are compute shaders supported?
+		bool m_computeSupported;
+
+		// paused time?
+		bool m_paused;
+
+		/* 'window' FBO */
+		glm::ivec2 m_lastSize;
+		GLuint m_rtColor, m_rtDepth, m_rtColorMS, m_rtDepthMS;
+		bool m_fbosNeedUpdate;
+
+		// check for the #include's & change the source code accordingly (includeStack == prevent recursion)
+		void m_includeCheck(std::string& src, std::vector<std::string> includeStack, int& lineBias);
+
+		// apply macros to GLSL source code
+		void m_applyMacros(std::string& source, pipe::ShaderPass* pass);
+		void m_applyMacros(std::string& source, pipe::ComputePass* pass);
+		void m_applyMacros(std::string& source, pipe::AudioPass* pass); // TODO: merge this function with the ones above
+		
+		// does a shader pass with GSUsed set also use this texture
+		bool m_isGSUsedSet(GLuint rt);
 
 		/* picking */
 		bool m_pickAwaiting;
 		float m_pickDist;
 		std::function<void(PipelineItem*)> m_pickHandle;
-		DirectX::XMVECTOR m_pickOrigin; // view space
-		DirectX::XMVECTOR m_pickDir;
-		PipelineItem* m_pick;
-		void m_pickItem(PipelineItem* item);
+		glm::vec3 m_pickOrigin; // view space
+		glm::vec3 m_pickDir;
+		std::vector<PipelineItem*> m_pick;
+		bool m_wasMultiPick;
+		void m_pickItem(PipelineItem* item, bool multiPick);
 
-		DirectX::XMINT2 m_lastSize;
-		ml::RenderTexture m_rt;
-		ml::ShaderResourceView m_rtView;
+		// cache
+		std::vector<PipelineItem*> m_items;
+		std::vector<GLuint> m_shaders;
+		std::vector<GLuint> m_debugShaders;
+		std::map<pipe::ShaderPass*, std::vector<GLuint>> m_fbos;
+		std::map<pipe::ShaderPass*, GLuint> m_fboMS; // multisampled fbo's
+		std::map<pipe::ShaderPass*, GLuint> m_fboCount;
+		struct ShaderPack {ShaderPack() {VS=GS=PS=0;} GLuint VS, PS, GS;};
+		std::vector<ShaderPack> m_shaderSources;
 
-		ml::SamplerState m_sampler;
+		GLuint m_debugPixelShader, m_debugVertexPickShader, m_debugInstancePickShader;
 
-		std::vector<ed::PipelineItem*> m_items;
-		std::vector<ml::VertexShader*> m_vs;
-		std::vector<ml::VertexInputLayout*> m_vsLayout;
-		std::vector<ml::PixelShader*> m_ps;
-		std::vector<ml::GeometryShader*> m_gs;
+		void m_updatePassFBO(ed::pipe::ShaderPass* pass);
 
 		std::vector<ItemVariableValue> m_itemValues; // list of all values to apply once we start rendering 
 
-		ml::Timer m_cacheTimer;
+		eng::Timer m_cacheTimer;
 		void m_cache();
 	};
 }

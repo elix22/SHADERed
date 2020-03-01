@@ -2,17 +2,11 @@
 #include "FunctionVariableManager.h"
 #include "SystemVariableManager.h"
 #include <iostream>
+#include <regex>
 
 namespace ed
 {
-	ShaderVariableContainer::ShaderVariableContainer()
-	{
-		for (int i = 0; i < CONSTANT_BUFFER_SLOTS; i++)
-			m_cachedSize[i] = 0;
-
-		m_dataBlock = nullptr;
-		m_dataBlockSize = 0;
-	}
+	ShaderVariableContainer::ShaderVariableContainer() { }
 	ShaderVariableContainer::~ShaderVariableContainer()
 	{
 		for (int i = 0; i < m_vars.size(); i++) {
@@ -22,9 +16,6 @@ namespace ed
 			m_vars[i]->Arguments = nullptr;
 			delete m_vars[i];
 		}
-		for (int i = 0; i < CONSTANT_BUFFER_SLOTS; i++)
-			m_cb[i].Release();
-		free(m_dataBlock);
 	}
 	void ShaderVariableContainer::AddCopy(ShaderVariable var)
 	{
@@ -44,79 +35,135 @@ namespace ed
 				break;
 			}
 	}
-	void ShaderVariableContainer::UpdateBuffers(ml::Window* wnd)
+	void ShaderVariableContainer::UpdateUniformInfo(GLuint pass)
 	{
-		int usedSize[CONSTANT_BUFFER_SLOTS] = { 0 };
-		for (auto var : m_vars)
-			usedSize[var->Slot] += ed::ShaderVariable::GetSize(var->GetType());
+		GLint count;
 
-		char* data = m_updateData();
-		
-		for (int i = 0; i < CONSTANT_BUFFER_SLOTS; i++) {
-			if (usedSize[i] == 0) {
-				if (m_cachedSize[i] != 0) {
-					m_cb[i].Release();
-					m_cachedSize[i] = 0;
-				}
-			} else {
-				if (usedSize[i] != m_cachedSize[i]) {
-					m_cb[i].Create(*wnd, data, (((usedSize[i] / 16) + 1) * 16), ml::Resource::Dynamic | ml::Resource::CPUWrite);
-					m_cachedSize[i] = usedSize[i];
-				} else {
-					D3D11_MAPPED_SUBRESOURCE sub;
-					m_cb[i].Map(sub, ml::IResource::MapType::WriteDiscard);
-					memcpy(sub.pData, data, usedSize[i]);
-					m_cb[i].Unmap();
-				}
+		const GLsizei bufSize = 64; // maximum name length
+		GLchar name[bufSize]; // variable name in GLSL
+		GLsizei length; // name length
+		GLuint samplerLoc = 0;
 
-				// skip the part that we already updated
-				data += usedSize[i];
-			}
+		glGetProgramiv(pass, GL_ACTIVE_UNIFORMS, &count);
+		for (GLuint i = 0; i < count; i++)
+		{
+			GLint size;
+			GLenum type;
+
+			glGetActiveUniform(pass, (GLuint)i, bufSize, &length, &size, &type, name);
+
+			if (type == GL_SAMPLER_2D)
+				glUniform1i(glGetUniformLocation(pass, name), samplerLoc++);
+			else
+				m_uLocs[name] = glGetUniformLocation(pass, name);
 		}
 	}
-	char* ShaderVariableContainer::m_updateData()
+	void ShaderVariableContainer::UpdateTextureList(const std::string& fragShader)
 	{
-		if (m_dataBlockSize != m_getDataSize()) {
-			m_dataBlockSize = m_getDataSize();
-			m_dataBlock = (char*)realloc(m_dataBlock, m_dataBlockSize);
-		}
+		m_samplers.clear();
 
-		// get the list of all slots
-		std::vector<int> slots;
+		try {
+			std::regex re("[a-z]?sampler.+ .+;");
+			std::sregex_iterator next(fragShader.begin(), fragShader.end(), re);
+			std::sregex_iterator end;
+			while (next != end) {
+				std::smatch match = *next;
+				std::string name = match.str();
+				name = name.substr(name.find_first_of(' ') + 1);
+				name = name.substr(0, name.size() - 1);
+				m_samplers.push_back(name);
+				next++;
+			}
+		}
+		catch (std::regex_error& e) {
+			// Syntax error in the regular expression
+		}
+	}
+	void ShaderVariableContainer::UpdateTexture(GLuint pass, GLuint unit)
+	{
+		if (unit >= m_samplers.size())
+			return;
+
+		glUniform1i(glGetUniformLocation(pass, m_samplers[unit].c_str()), unit);
+	}
+	void ShaderVariableContainer::Bind(void* item)
+	{
 		for (int i = 0; i < m_vars.size(); i++) {
-			int cnt = std::count_if(slots.begin(), slots.end(), [=](auto a) {
-				return a == m_vars[i]->Slot;
-			});
+			FunctionVariableManager::AddToList(m_vars[i]);
+			
+			if (m_uLocs.count(m_vars[i]->Name) == 0)
+				continue;
+			
+			GLint loc = m_uLocs[m_vars[i]->Name];
 
-			if (cnt == 0)
-				slots.push_back(m_vars[i]->Slot);
-		}
-		std::sort(slots.begin(), slots.end());
+			// update values if needed
+			SystemVariableManager::Instance().Update(m_vars[i], item);
+			FunctionVariableManager::Update(m_vars[i]);
 
-		char* data = m_dataBlock;
-		while (slots.size() != 0) {
-			for (int i = 0; i < m_vars.size(); i++) {
-				if (m_vars[i]->Slot != slots[0])
-					continue;
-				
-				// update the variable (only if needed)
-				SystemVariableManager::Instance().Update(m_vars[i]);
-				FunctionVariableManager::Update(m_vars[i]);
+			// update uniform every time we bind this container
+			// TODO: maybe we shouldn't update variables that havent changed
+			ShaderVariable::ValueType type = m_vars[i]->GetType();
 
-				int curSize = ShaderVariable::GetSize(m_vars[i]->GetType());
-				memcpy(data, m_vars[i]->Data, curSize);
-				data += curSize;
+			// check the flags
+			if (m_vars[i]->Flags & (char)ShaderVariable::Flag::Inverse) {
+				if (type == ShaderVariable::ValueType::Float4x4) {
+					glm::mat4x4 matVal = glm::make_mat4x4(m_vars[i]->AsFloatPtr());
+					memcpy(m_vars[i]->Data, glm::value_ptr(glm::inverse(matVal)), sizeof(glm::mat4x4));
+				} else if (type == ShaderVariable::ValueType::Float3x3) {
+					glm::mat3x3 matVal = glm::make_mat3x3(m_vars[i]->AsFloatPtr());
+					memcpy(m_vars[i]->Data, glm::value_ptr(glm::inverse(matVal)), sizeof(glm::mat3x3));
+				} else if (type == ShaderVariable::ValueType::Float2x2) {
+					glm::mat2x2 matVal = glm::make_mat2x2(m_vars[i]->AsFloatPtr());
+					memcpy(m_vars[i]->Data, glm::value_ptr(glm::inverse(matVal)), sizeof(glm::mat2x2));
+				}
 			}
-			slots.erase(slots.begin() + 0);
+
+			switch (type) {
+			case ShaderVariable::ValueType::Boolean1:
+			case ShaderVariable::ValueType::Integer1:
+				glUniform1i(loc, m_vars[i]->AsInteger());
+				break;
+			case ShaderVariable::ValueType::Boolean2:
+			case ShaderVariable::ValueType::Integer2:
+				glUniform2iv(loc, 1, m_vars[i]->AsIntegerPtr());
+				break;
+			case ShaderVariable::ValueType::Boolean3:
+			case ShaderVariable::ValueType::Integer3:
+				glUniform3iv(loc, 1, m_vars[i]->AsIntegerPtr());
+				break;
+			case ShaderVariable::ValueType::Boolean4:
+			case ShaderVariable::ValueType::Integer4:
+				glUniform4iv(loc, 1, m_vars[i]->AsIntegerPtr());
+				break;
+			case ShaderVariable::ValueType::Float1:
+				glUniform1f(loc, m_vars[i]->AsFloat());
+				break;
+			case ShaderVariable::ValueType::Float2:
+				glUniform2fv(loc, 1, m_vars[i]->AsFloatPtr());
+				break;
+			case ShaderVariable::ValueType::Float3:
+				glUniform3fv(loc, 1, m_vars[i]->AsFloatPtr());
+				break;
+			case ShaderVariable::ValueType::Float4:
+				glUniform4fv(loc, 1, m_vars[i]->AsFloatPtr());
+				break;
+			case ShaderVariable::ValueType::Float2x2:
+				glUniformMatrix2fv(loc, 1, GL_FALSE, m_vars[i]->AsFloatPtr());
+				break;
+			case ShaderVariable::ValueType::Float3x3:
+				glUniformMatrix3fv(loc, 1, GL_FALSE, m_vars[i]->AsFloatPtr());
+				break;
+			case ShaderVariable::ValueType::Float4x4:
+				glUniformMatrix4fv(loc, 1, GL_FALSE, m_vars[i]->AsFloatPtr());
+				break;
+			}
 		}
-
-		return m_dataBlock;
 	}
-
-	size_t ShaderVariableContainer::m_getDataSize()
+	bool ShaderVariableContainer::ContainsVariable(const char* name)
 	{
-		size_t ret = 0;
-		for (auto var : m_vars) ret += ShaderVariable::GetSize(var->GetType());
-		return ret;
+		for (int i = 0; i < m_vars.size(); i++)
+			if (strcmp(m_vars[i]->Name, name) == 0)
+				return true;
+		return false;
 	}
 }

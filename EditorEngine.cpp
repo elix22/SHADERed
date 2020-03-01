@@ -4,10 +4,11 @@
 
 namespace ed
 {
-	EditorEngine::EditorEngine(ml::Window* wnd) :
-		m_ui(&m_interface, wnd),
-		m_interface(&m_ui, wnd)
+	EditorEngine::EditorEngine(SDL_Window* wnd, SDL_GLContext* gl) :
+		m_ui(&m_interface, wnd, gl),
+		m_interface(&m_ui)
 	{
+		m_interface.Plugins.Init(&m_interface, &m_ui); // load plugins (TODO: maybe move this to the splash screen)
 	}
 	void EditorEngine::Create()
 	{
@@ -16,7 +17,7 @@ namespace ed
 		// load template
 		m_interface.Pipeline.New();
 	}
-	void EditorEngine::OnEvent(const ml::Event & e)
+	void EditorEngine::OnEvent(const SDL_Event& e)
 	{
 		m_ui.OnEvent(e);
 		m_interface.OnEvent(e);
@@ -35,6 +36,7 @@ namespace ed
 	}
 	void EditorEngine::Destroy()
 	{
+		m_interface.Pipeline.Clear();
 		m_ui.SaveSettings();
 		Settings::Instance().Save();
 	}

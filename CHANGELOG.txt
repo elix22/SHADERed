@@ -1,2 +1,250 @@
+[v1.3.1]
++ fix font resizing/changing
++ fix picking with SHIFT + A
++ fix picking scaled 3D models
++ fix a bug where SHADERed would sometimes block on exit on Linux
++ moving items up/down now counts as a project modification
++ resizing render textures now counts as a project modification
++ remove MatrixShadow and MatrixReflect
+
+[v1.3]
++ add shader debugger
++ add plugin API
++ add MSAA
++ add option for supersampling when rendering to an image file
++ add support for #include keyword
++ add "Export -> as C++ project" option
++ add ability to load projects by drag and dropping them
++ add search in Options -> Shortcuts
++ add "Pause preview on startup" option
++ add "Show function description tooltips" option
++ change default font & theme
++ change how MouseButton works
++ change how paused state works
++ clicking on "Reset time" when paused will now rerender everything
++ fix zoom reset using double click when paused
++ fix a bug where SHADERed would think it's minimized on startup (and slow down the whole program)
++ fix copy and pasting '\t'
++ fix deleting '\t'
++ various fixes
+
+[v1.2.4]
++ add drag & drop to PipelineUI
++ add ability to "hide/deactivate" certain shader pass
++ fix TextEditor shortcut system (**please update your shortcuts.kb file**)
++ fix Home/End in TextEditor
++ fix gizmo interaction when preview is zoomed in
++ fix Find tool's highlighting
++ fix pause functionality
++ scroll to Find tool's selection
++ Editor.Replace is now bound to CTRL+H (instead of SHIFT+H)
+
+[v1.2.3]
++ add 3D textures
++ add audio shaders (HLSL/GLSL synthesized audio)
++ add ability to have multiple cameras / camera snapshots
++ add ability to change variable type after variable has been created
++ add a window where all system variables are listed
++ add magnifier tool to texture/image preview window
++ add find and replace feature in the text editor
++ add right click context menu in the text editor
++ add Editor.FindNext shortcut
++ add feature that automatically adds variables on shader pass creation
++ add support for HLSL types in the buffer format
++ add ability to change warning, message and error text colors in the theme files
++ add ability to use sprintf format specifiers in filenames when exporting image sequence
++ fix copy and paste
++ fix matrix variable exporting & importing
++ fix a bug where openning Sobel -> Edge -> Sobel examples would break the renderer
++ fix RT default size
++ fix bounding box color
++ fix a bug where SHADERed would recompile file two times after clicking "Compile" button
++ fix texture loading
++ fix "GeometryShader" & "VulkanSimple" example
++ fix a bug where "Outline" example wouldn't work after Edge/Sobel examples
++ fix ObjectPreviewUI::Close()
++ fix a crash on openning "cubemap" example
++ improve image sequence export speed
++ any form of project saving should also now save all shader code modifications
++ shader code modifications now also count as project modifications (now you will get "Are you sure" message box on exit)
++ recompile shader pass after we change it's shader path
++ close code editors after a shader pass has been deleted
++ prevent various crashes (loading wrong 3D model file, wrong project file, compute shaders not supported, etc...)
++ color compute shader labels light/dark green (can be changed)
++ improve CTRL+F
++ internal changes
+
+[v1.2.2]
++ rework image objects (you can choose how to bind them & removed Read & Write flags) - **some old projects with compute shaders may not work**
++ add support for Vulkan GLSL
++ add input layout manager
++ add CTRL+F in code editor
++ add tangent, bitangent and color vertex attributes
++ add ability to export your shader to an image sequence
++ add support for drag & drop
++ add resource manager
++ add project change detection & "Are you sure?" message box
++ add "Hide menu bar in performance mode" option
++ add glslang error messages when preprocessing fails
++ add CamerPosition3 and CameraDirection3 variables
++ fix a bug which would crash whole app after deleting last variable in the list
++ fix a bug where variable name was wrongly limited to 16chars when being created
++ fix a bug where SHADERed would use absolute paths even if project and shader file were on the same drive
++ fix file "Compile" option so that it only recompiles the correct shader pass
++ fix "Recompile on file change" so that it only recompiles correct shaders
++ fix non resizable columns
++ fix a bug where SHADERed would sometimes crash on exit
++ fix a bug where no actual error messages show up with the auto recompile on HLSL and Vulkan GLSL shaders
++ fix "Edge" example
++ fix for two vertical scrollbars in CodeEditorUI
++ fix for loading textures with improper size
++ fix ScreenQuadNDC rendering in GLSL projects
++ save "performance mode" state on exit
++ increase variable name length from 32 to 256
++ color the "Name:" label red when user tries to use already existing item name
+
+[v1.2.1]
++ fix ctrl + backspace / ctrl + delete
++ fix ctrl + shift selecting
++ fix "Insert spaces on tab press" option
++ fix "Show horizontal scrollbar" option
++ fix text editor error message color on light theme (& add ErrorMessage property to editor themes)
++ fix various transcompiler crashes
++ fix a crash that occurs when fetching texel data from a texture without a sampler in a HLSL shader
++ fix a bug where text editor would append \n at the end of file
++ fix crash when using RWTexture2D
++ fix crash on HLSL function calls with no arguments
++ write item type in the Properties
++ minor UI polishing
+
+[v1.2]
++ add compute shaders
++ add empty image object
++ fix loading files from different drives on Windows
++ fix saving info about item opened in PropertyUI
++ fix "Show error list window when build finishes with an error" option
++ temprorary fix for crash on float3(), float4(), etc...
+
+[v1.1.5]
++ add auto recompile option (compile shaders every 200ms)
++ add option to disable/enable window's alpha channel
++ add "Show whitespace" option
++ add ScreenQuadNDC
++ add the ability to set CodeUI.Save and Project.Save to same shortcut
++ add option to stream logs to log.txt
++ fix some TextEditor bugs
+
+[v1.1.4]
++ add option to reset time
++ add CTRL+ALT+MWheel to zoom in/out
++ add cubemap preview
++ add object preview window
++ add buffer objects
++ add instancing
++ add automatic update checks
++ add option to modify system variables when rendering to image
++ fix zoom area dragging
++ fix zoom selection bounds
++ fix picking when zoomed in
++ fix gizmo, bounding box & zoom area performance
++ fix a bug where SHADERed would crash with multiple 3D models
+
+[v1.1.3]
++ add icon font
++ add tool bar
++ add zoom in/out functionality
++ add zoom controls (ALT + LEFT drag to select the zoom area, ALT + RIGHT drag to move the zoom area, ALT + DBL CLICK reset zoom)
++ add format property to render textures
++ add ability to pause and increase time by 100ms (or hold CTRL to increase just by 1 frame)
++ add Mouse and MouseButton system variables
++ fix float4/int4/bool4 variables
++ fix last frame flag for GeometryTransform
++ fix a bug where bounding box wouldn't show if gizmo is turned off
+- disable last frame flag for ViewportSize
+
+[v1.1.2]
++ add Pointer function (variables can now be pointers to other variables)
++ add shader macros
++ add FrameIndex system variable
++ add shader variable flags (invert matrices, use last frame values, etc...)
++ add option to disable RT clear
++ fix clear color parsing
++ fix a bug where SHADERed would crash when adding a shader pass through CreateItemUI
+
+[v1.1.1]
++ fix a bug when multiple textures are bound but some are not used
++ fix GLSL shaders (specify location)
+
+[v1.1.0]
++ port from DirectX to OpenGL & SDL (works on linux now)
++ add CMakeLists.txt
++ use assimp - supports more 3D model file formats
++ link glslang and SPIRV-Cross (rather than using external processes)
++ only one variable manager for all stages (variable names now matter though)
++ write actual error messages in the Output window
++ add line number and shader type (source) in the Output Window
++ support single key shortcuts (example: press F to go into Performance mode)
++ KeyboardShortcuts doesnt listen to repeated events anymore
++ merge DepthStencilState, RasterizerState, BlendState into one state called RenderState
++ HLSL to GLSL transcompiler
++ cubemaps now require path to 6 separate textures
++ append version to project files (+ backwards compatibility)
++ implement version #2 of SHADERed project files
++ SHIFT+drag gizmo for faster dragging
++ slow down the application when minimized
++ add "Apply the FPS limit to the whole application" option
++ add "Limit application to 60FPS when it is not focused" option
++ limit rotation value between [0, 360] in PropertyUI
++ duplicated object now appears in PropertyUI if "PropertyPick" option is turned on
++ IsPicked variable now works with multiple items selected
++ prompt user to save project when user tries to save changes to a shader file in a template
++ prompt user to save project when user tries to open template shaders in an external editor
++ add an actual logger -> outputs high amount of stuff in log.txt
++ fix mouse cursor capture when rotating camera
++ fix bounding boxes for other geometry types
++ fix for "app wont gain focus when clicking on anything but the titlebar"
++ fix a bug where the app would crash if when set as a default app for ".sprj" files
++ fix a bug where gizmo wont move with the selected object when the object is moved using PropertyUI
++ fix a bug where user couldnt write {} (and other characters using alt and ctrl) in the text editor
++ fix a bug where user could pick a render state item by double clicking it in PipelineUI
++ fix a bug where two items could exist with names "Box", "BoX", etc...
++ fix a bug where where SHADERed wouldnt check for file updates on a recently added geometry shader
+- remove FXAA
+- remove stats page
+- remove input layout manager
+- remove glslangValidator.exe & SPIRVCross.exe
+
+[v1.0.3]
++ add ability to duplicate selected items
++ add shift+click to select multiple items
++ add bounding box
++ add option to open shaders in an external text editor
++ add a more flexible GLSL file extension system
++ add mute button for audio files
++ add context menu in ObjectListUI and PipelineUI
++ add "collapsed" attribute to shader passes in the project file
++ add a wheel UI when rotating an object using GizmoObject
++ add option to snap transformations with gizmo
++ add minor changes to UI design in Options
++ add CTRL+click shortcut to delete the shortcut in the options
++ add DPI scale text in the options
++ add wrapped text in popup windows
++ show degrees (rather than radians) in PropertyUI for OBJModel and Geometry
++ fix gizmo (different model for scale and rotation transforms, change color on hover, etc...)
++ fix item picking
++ fix an error that occurs when loading audio file on a PC with no audio output device
++ fix PipelineManager::Has -> it was possible to have two or more items with the same name
+
+[v1.0.2]
++ add ability to load audio files
++ add DPI awareness
++ fix for "VSync not being applied on startup"
+
 [v1.0.1]
 + add more editor shortcuts to the options
++ add an option to automatically recompile shader on file change 
++ add performance mode (hide everything except preview window)
++ add FXAA
++ add "Open project directory" option
++ add ability to switch what left and right click do
++ fix TextEditor ctrl+backspace/delete

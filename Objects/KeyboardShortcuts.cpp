@@ -1,7 +1,12 @@
 #include "KeyboardShortcuts.h"
-#include <Windows.h>
+#include "Logger.h"
+#include "Names.h"
+
 #include <fstream>
 #include <sstream>
+
+#include <ImGuiColorTextEdit/TextEditor.h>
+#include <SDL2/SDL_keyboard.h>
 
 namespace ed
 {
@@ -11,8 +16,16 @@ namespace ed
 	}
 	void KeyboardShortcuts::Load()
 	{
-		std::ifstream file("shortcuts.kb");
+		ed::Logger::Get().Log("Loading shortcut information");
+
+		std::ifstream file("data/shortcuts.kb");
 		std::string str;
+
+		// pre setup Editor shortcuts (TODO: improve this... TextEditor::GetDefaultShortcuts())
+		std::vector<TextEditor::Shortcut> eds = TextEditor::GetDefaultShortcuts();
+		for (int i = 0; i < eds.size(); i++)
+			Set(std::string("Editor." + std::string(EDITOR_SHORTCUT_NAMES[i])).c_str(), eds[i].Key1, eds[i].Key2, eds[i].Alt, eds[i].Ctrl, eds[i].Shift);
+
 
 		while (std::getline(file, str)) {
 			std::stringstream ss(str);
@@ -22,40 +35,37 @@ namespace ed
 
 			if (name.empty()) continue;
 
-			m_data[name].Key1 = -1;
-			m_data[name].Key2 = -1;
-
+			int vk1 = -1, vk2 = -1;
+			bool alt = false, ctrl = false, shift = false;
 			while (ss >> token)
 			{
-				if (token == "CTRL")
-					m_data[name].Ctrl = true;
-				else if (token == "ALT")
-					m_data[name].Alt = true;
-				else if (token == "SHIFT")
-					m_data[name].Shift = true;
+				if (token == "CTRL") ctrl = true;
+				else if (token == "ALT") alt = true;
+				else if (token == "SHIFT") shift = true;
+				else if (token == "NONE") break;
 				else {
-					for (int i = 0; i < 0xE8; i++) {
-						if (token == ml::Keyboard::KeyToString(i)) {
-							if (m_data[name].Key1 == -1)
-								m_data[name].Key1 = i;
-							else if (m_data[name].Key2 == -1)
-								m_data[name].Key2 = i;
-						}
-					}
+					if (vk1 == -1)
+						vk1 = SDL_GetKeyFromName(token.c_str());
+					else if (m_data[name].Key2 == -1)
+						vk2 = SDL_GetKeyFromName(token.c_str());
 				}				
 			}
+
+			Set(name, vk1, vk2, alt, ctrl, shift);
 		}
 
-		return;
+		ed::Logger::Get().Log("Loaded shortcut information");
 	}
 	void KeyboardShortcuts::Save()
 	{
-		std::ofstream file("shortcuts.kb");
+		std::ofstream file("data/shortcuts.kb");
 		std::string str;
-
+		
 		for (auto& s : m_data) {
-			if (s.second.Key1 == -1)
+			if (s.second.Key1 == -1) {
+				//file << " NONE" << std::endl;
 				continue;
+			}
 
 			file << s.first;
 
@@ -65,24 +75,33 @@ namespace ed
 				file << " ALT";
 			if (s.second.Shift)
 				file << " SHIFT";
-			file << " " << ml::Keyboard::KeyToString(s.second.Key1);
+			file << " " << SDL_GetKeyName(s.second.Key1);
 			if (s.second.Key2 != -1)
-				file << " " << ml::Keyboard::KeyToString(s.second.Key2);
+				file << " " << SDL_GetKeyName(s.second.Key2);
 
 			file << std::endl;
 		}
+
+		ed::Logger::Get().Log("Saved shortcut information");
 
 		return;
 	}
 	bool KeyboardShortcuts::Set(const std::string& name, int VK1, int VK2, bool alt, bool ctrl, bool shift)
 	{
-		if (VK1 == -1 || (alt == false && ctrl == false && shift == false && !m_canSolo(VK1)))
+		if (VK1 == -1 || (alt == false && ctrl == false && shift == false && !m_canSolo(name, VK1)))
 			return false;
-		
+
 		for (auto& i : m_data)
 			if (i.second.Ctrl == ctrl && i.second.Alt == alt && i.second.Shift == shift && i.second.Key1 == VK1 && (VK2 == -1 || i.second.Key2 == VK2 || i.second.Key2 == -1)) {
-				i.second.Ctrl = i.second.Alt = i.second.Shift = false;
-				i.second.Key1 = i.second.Key2 = -1;
+				if (!(name == "CodeUI.Save" && i.first == "Project.Save") &&
+					!(name == "Project.Save" && i.first == "CodeUI.Save") &&
+					((name.find("Editor") == std::string::npos && i.first.find("Editor") == std::string::npos) ||
+					 (name.find("Editor") != std::string::npos && i.first.find("Editor") != std::string::npos && // autocomplete is a "special module" added to the text editor and not actually the text editor 
+						(name.find("Autocomplete") == std::string::npos && i.first.find("Autocomplete") == std::string::npos)))) 
+				{
+					i.second.Ctrl = i.second.Alt = i.second.Shift = false;
+					i.second.Key1 = i.second.Key2 = -1;
+				}
 			}
 		m_data[name].Alt = alt;
 		m_data[name].Ctrl = ctrl;
@@ -99,7 +118,7 @@ namespace ed
 	std::string KeyboardShortcuts::GetString(const std::string& name)
 	{
 		if (m_data[name].Key1 == -1 || (m_data[name].Key1 == 0 && m_data[name].Key2 == 0))
-			return "";
+			return "NONE";
 
 		std::string ret = "";
 
@@ -109,27 +128,40 @@ namespace ed
 			ret += "ALT+";
 		if (m_data[name].Shift)
 			ret += "SHIFT+";
-		ret += ml::Keyboard::KeyToString(m_data[name].Key1) + "+";
+		ret += std::string(SDL_GetKeyName(m_data[name].Key1)) + "+";
 		if (m_data[name].Key2 != -1)
-			ret += ml::Keyboard::KeyToString(m_data[name].Key2) + "+";
+			ret += std::string(SDL_GetKeyName(m_data[name].Key2)) + "+";
 
 		return ret.substr(0, ret.size() - 1);
 	}
 	std::vector<std::string> KeyboardShortcuts::GetNameList()
 	{
 		std::vector<std::string> ret;
-		for (auto i : m_data)
+		for (const auto& i : m_data)
 			ret.push_back(i.first);
 		return ret;
 	}
-	void KeyboardShortcuts::Check(const ml::Event& e)
+	void KeyboardShortcuts::Check(const SDL_Event& e, bool codeHasFocus)
 	{
-		m_keys[0] = m_keys[1];
-		m_keys[1] = e.Keyboard.VK;
+		// dont process key repeats
+		if (e.key.repeat != 0)
+			return;
 
-		for (auto hotkey : m_data) {
+		m_keys[0] = m_keys[1];
+		m_keys[1] = e.key.keysym.sym;
+
+		bool alt = e.key.keysym.mod & KMOD_ALT;
+		bool ctrl = e.key.keysym.mod & KMOD_CTRL;
+		bool shift = e.key.keysym.mod & KMOD_SHIFT;
+
+		bool resetSecond = false, resetFirst = false;
+
+		for (const auto& hotkey : m_data) {
+			if (codeHasFocus && !(hotkey.first.find("Editor") != std::string::npos || hotkey.first.find("CodeUI") != std::string::npos || hotkey.first.find("Debug") != std::string::npos || hotkey.first == "Project.Save"))
+				continue;
+
 			Shortcut s = hotkey.second;
-			if (s.Alt == e.Keyboard.Alt && s.Ctrl == e.Keyboard.Control && s.Shift == e.Keyboard.Shift) {
+			if (s.Alt == alt && s.Ctrl == ctrl && s.Shift == shift) {
 				int key2 = m_keys[1];
 				if (s.Key2 == -1 && s.Key1 == key2 && s.Function != nullptr) {
 
@@ -140,9 +172,9 @@ namespace ed
 					bool found = false;
 					int key1 = m_keys[0];
 					if (key1 != -1)
-						for (auto clone : m_data)
-							if (clone.second.Alt == e.Keyboard.Alt && clone.second.Ctrl == e.Keyboard.Control && clone.second.Shift == e.Keyboard.Shift &&
-								clone.second.Key1 == key1 && clone.second.Key2 == key2)
+						for (const auto& clone : m_data)
+							if (clone.second.Alt == alt && clone.second.Ctrl == ctrl && clone.second.Shift == shift &&
+								clone.second.Key1 == key1 && clone.second.Key2 == key2 && clone.second.Key2 != -1)
 							{
 								found = true;
 							}
@@ -150,7 +182,7 @@ namespace ed
 					// call the proper function
 					if (!found) {
 						s.Function();
-						m_keys[1] = -1;
+						resetSecond = true;
 					}
 				}
 				else if (s.Key2 != -1) {
@@ -160,16 +192,19 @@ namespace ed
 						if (s.Key1 == key1 && s.Key2 == key2 && s.Function != nullptr) {
 							s.Function();
 
-							m_keys[1] = -1;
-							m_keys[0] = -1;
+							resetFirst = resetSecond = true;
 						}
 					}
 				}
 			}
 		}
+
+		if (resetFirst) m_keys[0] = -1;
+		if (resetSecond) m_keys[1] = -1;
 	}
-	bool KeyboardShortcuts::m_canSolo(int k)
+	bool KeyboardShortcuts::m_canSolo(const std::string& name, int k)
 	{
-		return (k >= VK_F1 && k <= VK_F24);
+		bool isEditorSpecial = (name.find("Editor") != std::string::npos) && !((k >= SDLK_0 && k <= SDLK_9) || (k >= SDLK_a && k <= SDLK_z)); // the key can go solo if it's a "special" key
+		return (k >= SDLK_F1 && k <= SDLK_F12) || (k >= SDLK_F13 && k <= SDLK_F24) || isEditorSpecial || (name.find("Editor") == std::string::npos);
 	}
 }
